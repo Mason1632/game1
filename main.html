@@ -6,11 +6,11 @@
                     var butn1 = document.getElementById('btn1');
 
                     if (butn1) {
-                        let socket = new WebSocket("wss://localhost:8080" );
+                        let socket = new WebSocket("wss://javascript.info/article/websocket/demo/hello" );
                         socket.onopen = function(e) {
                             alert("[open] Connection established");
                             alert("Sending to server");
-                            socket.send("My name is John");
+                            socket.send("hello, stranger you are in a web server");
                         };
                         socket.onmessage = function (event) {
                             alert(`[message] Data received from server: ${event.data}`);
@@ -31,5 +31,6 @@
         </head>
         <body>
             <input type="button" id="btn1" value="ClickMe" onclick="selectPrize()">
+            <p>this is a working websocket</p>
         </body>
 </html>
