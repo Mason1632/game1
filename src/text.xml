@@ -1,1 +1,2 @@
-
+add appfw XMLContentType ".*/xml" -isRegex REGEX
+ 
