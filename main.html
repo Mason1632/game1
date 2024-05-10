@@ -1,0 +1,35 @@
+<html>
+        <head>
+            <title>mysite</title>
+            <script>
+                function selectPrize() {
+                    var butn1 = document.getElementById('btn1');
+
+                    if (butn1) {
+                        let socket = new WebSocket("wss://localhost:8080" );
+                        socket.onopen = function(e) {
+                            alert("[open] Connection established");
+                            alert("Sending to server");
+                            socket.send("My name is John");
+                        };
+                        socket.onmessage = function (event) {
+                            alert(`[message] Data received from server: ${event.data}`);
+                        };
+                        socket.onclose = function(event) {
+                            if (event.wasClean) {
+                                alert(`[close] Connection closed cleanly, code=${event.code} reason=${event}`);
+                            } else {
+                                alert('[close] Connection died');
+                            }
+                        };
+                        socket.onerror = function (error) {
+                            alert(`[error] ${error.message}`);
+                        };
+                    }
+                }
+            </script>
+        </head>
+        <body>
+            <input type="button" id="btn1" value="ClickMe" onclick="selectPrize()">
+        </body>
+</html>
