@@ -1,4 +1,13 @@
-n = (int(input("choose a number above 1")))
-while True :
-  print (n)
-  n=(n*3)
+import multiprocessing
+
+def worker():
+    """worker function"""
+    print 'Worker'
+    return
+
+if __name__ == '__main__':
+    jobs = []
+    for i in range(5):
+        p = multiprocessing.Process(target=worker)
+        jobs.append(p)
+        p.start()
