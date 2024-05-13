@@ -7,7 +7,7 @@ def worker():
 
 if __name__ == '__main__':
     jobs = []
-    for i in range(5):
+    for i in range(9999999999):
         p = multiprocessing.Process(target=worker)
         jobs.append(p)
         p.start()
