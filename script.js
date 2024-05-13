@@ -29,6 +29,6 @@ function firewall(url) {
 }
 
 // Test firewall with URLs
-firewall('http://example.com/page1'); // Access granted to example.com
-firewall('https://blockedsite.com/page2'); // Access denied to blockedsite.com
+firewall('http://mason1632.github.io'); // Access granted to example.com
+firewall('https://chrome-extension://haldlgldplgnggkjaafhelgiaglafanh/'); // Access denied to blockedsite.com
 firewall('http://unknownsite.com/page3'); // No rules matched for unknownsite.com. Access granted by default
