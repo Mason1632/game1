@@ -1,0 +1,314 @@
+#!/usr/local/bin/perl
+# $Id: xml-check.pl,v 1.3 1997/05/10 19:24:49 connolly Exp $
+#
+# Usage: xml-check.pl [-emit start|end|empty|comment|eref|cref|...]+
+#                     [-all] entity
+#
+
+&getOpts;
+$entity = join('', <>); # <> is a perl idiom for "all the input
+                        # from stdin or files on the command line"
+&parseEntity($entity);
+
+sub process{
+    local($type, $text, @rest) = @_;
+
+    print "==>$type: @rest [$text]\n" if $EmitAll || $Emit{$type};
+}
+
+sub error{
+    local($message, $pending) = @_;
+    $rest = substr($_, 0, 40);
+    @Stack;
+    die "ERROR: $Line: $message\n" .
+      "stack: (@Stack) pending: $pending<!!!>$rest\n";
+}
+
+sub getOpts{
+    local($opt);
+    while(($opt = $ARGV[0]) =~ /^-/){
+	shift(@ARGV);
+	if($opt eq '-emit'){
+	    $Emit{shift(@ARGV)} = 1;
+	}
+	elsif($opt eq '-all'){
+	    $EmitAll = 1;
+	}
+	else{
+	    die "unkonwn option: $opt";
+	}
+    }
+}
+
+##########
+#
+
+sub parseEntity{
+    local($_) = @_;
+
+    local(@Stack);
+    local($Line, $Element) = (1, 1);
+
+    &emit('BOF');
+
+    while(length($_) > 0){
+	if(s/^[^&<>]+//){
+	    &emit('data', $&);
+	}
+	
+	elsif(s/^&\#//){
+	    &cref($&);
+	}
+	elsif(s/^&//){
+	    &eref($&);
+	}
+	
+	elsif(s/^<!--//){
+	    &comment($&);
+	}
+	
+	elsif(s/^<!\[//){
+	    &section($&);
+	}
+	      
+	elsif(s/^<!//){
+	    &decl($&);
+	}
+
+	elsif(s,^</,,){
+	    &endTag($&);
+	}
+	
+	elsif(s/^<//){
+	    &startTag($&);
+	}
+
+	else{
+	    &error('syntax error');
+	}
+    }
+
+    &emit('EOF');
+}
+
+sub emit{
+    local($type, $text, @rest) = @_;
+
+    if($type eq 'start'){
+	push(@Stack, @rest, $Element, $Line);
+	$Element ++;
+	@rest = @Stack;
+    }
+
+    elsif($type eq 'empty'){
+	@rest = (@Stack, @rest, $Element, $Line);
+	$Element ++;
+    }
+
+    elsif($type eq 'end'){
+	&error('extra end tag', $text, $_, '') unless @Stack;
+	local($line, $elt, $top) = @Stack[-1, -2, -3];
+
+	if($top eq $rest[0]){
+	    @rest = (@rest, $elt, $line);
+	    pop(@Stack);
+	    pop(@Stack);
+	    pop(@Stack);
+	}
+	else{
+	    &error('end tag mismatch', $text);
+	}
+    }
+    elsif($type eq 'EOF'){
+	&error('not enough end tags') if @Stack;
+    }
+
+    &process($type, $text, @rest);
+
+    $Line += ($text =~ tr/\n/\n/);
+}
+
+
+sub eref{
+    local($pending) = @_;
+    local($p, $name);
+
+    ($p, $name) = &name(0);
+    if($name){ # entity name
+	if(s/^;//){
+	    &emit('eref', $pending . $&, $1);
+	}else{
+	    &error('expected ; after entity name', $pending . $p);
+	}
+    }
+    else{
+	&error('expected entity name after &', $pending);
+    }
+}
+
+sub cref{
+    local($pending) = @_;
+
+    if(s/^([0-9]+);//){ # entity reference @@hex?
+	&emit('cref', $pending . $&, $1);
+    }
+    else{
+	&error('bad character reference syntax', $pending);
+    }
+}
+
+
+sub startTag{
+    local($pending) = @_;
+
+    local($p, $name);
+
+    ($p, $name) = &name(1);
+    if($name){
+	$pending .= $p;
+	if(s/^\s+//){ $pending .= $&; }
+	&emit('tagname', $pending, $name);
+	$pending = '';
+
+	while(length($_) > 0 && ! m,^[/>],){
+	    &attribute();
+	}
+
+	if(s,^/>,,){
+	    &emit('empty', $&, $name);
+	}
+	elsif(s/^>//){
+	    &emit('start', $&, $name);
+	}
+	else{
+	    &error('expected /> or > at end of tag', '');
+	}
+    }
+}
+
+sub attribute{
+    local($pending, $name);
+
+    if(s/^\s+//){
+	$pending .= $&;
+    }
+
+    elsif((($p, $name) = &name(0)), $name){
+	$pending .= $p;
+
+	if(   s/^=\s*('[^\']*')\s*//   # lita
+	   || s/^=\s*("[^\"]*")\s*//){ # lit
+	    $name =~ tr/A-Z/a-z/;
+	    &emit('name-lit-value', $pending . $&, $name, $1);
+
+	    #@# should provide routine to decode literals
+	}
+	if(s/^=\s*([a-zA-Z0-9\._-]+)\s*//){ # nmtoken
+	    $name =~ tr/A-Z/a-z/;
+	    &emit('name-token-value', $pending . $&, $name, $1);
+	}
+	else{
+	    &emit('enum', $pending, $name);
+	}
+    }else{
+	&error('expected attribute name', $pending, $_, @stack);
+    }
+}
+
+
+sub endTag{
+    local($pending) = @_;
+
+    local($p, $name);
+
+    if((($p, $name) = &name(1)), $name){
+	$pending .= $p;
+
+	if(s/^\s*>//){ # tag close
+	    $pending .= $&;
+
+	    emit('end', $pending, $name);
+	}
+	else{
+	    &error('expected > after end tag name', $pending, $_,
+		   (@stack, $top));
+	}
+    }
+    elsif(s,^>,,){ # empty end tag
+	$pending .= ($&);
+	emit('end', $pending, $Stack[-3]);
+    }
+    else{
+	&error('bad end tag syntax', $pending, $_, @stack);
+    }
+}
+
+
+sub name{
+    local($case) = @_;
+
+    if(s/^([a-zA-Z][a-zA-Z0-9\._-]*)\s*//){ # name
+	local($pending, $name) = ($&, $1);
+
+	$name =~ tr/A-Z/a-z/ if $case;
+	return($pending, $name);
+    }
+    return undef;
+}
+
+sub comment{
+    local($pending) = @_;
+
+    if(s/^(([^-]|-[^-])*)-->//){
+	&emit('comment', $pending . $&, $1);
+    }
+    else{
+	&error('bad comment syntax', $pending, $_, @stack);
+    }
+}
+
+sub decl{
+    local($pending) = @_;
+
+    local($p, $name);
+
+    #@ check keywords and parse strictly?
+
+    if((($p, $name) = &name(1)), $name){
+	&emit('decl', $pending . $p, $name);
+	$pending = '';
+
+	while(length($_) > 0 && ! /^>/){
+	    if(s/^\s+//){
+		$pending .= $&;
+	    }
+	    
+	    #@ expand syntax from name to numtoken?
+	    elsif((($p, $name) = &name(1)), $name){
+		&emit('name', $pending . $p, $name);
+		$pending = '';
+	    }
+
+	    elsif(   s/^\s*('[^\']*')\s*//   # lita
+		  || s/^\s*("[^\"]*")\s*//){ # lit
+		&emit('literal', $pending . $&, $1);
+		$pending = '';
+	    }
+	    else{
+		&error('bad declaration syntax', $pending, $_, @stack);
+	    }
+	}
+
+	if(s/^>//){
+	    &emit('decl-end', $&);
+	}
+	else{
+	    &error('expected > at end of declaration', $pending, $_, @stack);
+	}
+    }
+    else{
+	&error('expected declaration keyword', $pending, $_, @stack);
+    }
+}
+
+#@@ <![CDATA[ sections
