@@ -1,4 +1,4 @@
-entrypoint="index.html,function1.xml"
+entrypoint="index.html, main.py"
 hidden=[".config"]
 modules = ["web:v2-20230623-0b7a606"]
 
